@@ -6,7 +6,7 @@ use uavcan::transfer::TransferFrame;
 use uavcan::transfer::TransferFrameID;
 use uavcan::transfer::TransferInterface;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CanFrame {
     id: TransferFrameID,
     dlc: usize,
