@@ -10,7 +10,7 @@ use uavcan::transfer::TransmitError;
 pub struct CanInterface(socketcan::CANSocket);
 
 impl CanInterface {
-    pub fn new(ifname: &str) -> Result<Self, socketcan::CANSocketOpenError> {
+    pub fn open(ifname: &str) -> Result<Self, socketcan::CANSocketOpenError> {
         let interface = socketcan::CANSocket::open(ifname)?;
         interface.set_nonblocking(true).unwrap();
         Ok(CanInterface(interface))
