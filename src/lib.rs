@@ -4,6 +4,48 @@ extern crate uavcan;
 use uavcan::transfer::TransferFrame;
 use uavcan::transfer::TransferFrameID;
 use uavcan::transfer::TransferInterface;
+use uavcan::transfer::FullTransferID;
+use uavcan::transfer::TransmitError;
+
+pub struct CanInterface(socketcan::CANSocket);
+
+impl CanInterface {
+    pub fn new(ifname: &str) -> Result<Self, socketcan::CANSocketOpenError> {
+        let interface = socketcan::CANSocket::open(ifname)?;
+        interface.set_nonblocking(true).unwrap();
+        Ok(CanInterface(interface))
+    }
+}
+
+impl TransferInterface for CanInterface {
+    type Frame = CanFrame;
+
+    fn transmit(&self, frame: &Self::Frame) -> Result<(), TransmitError> {
+        let CanInterface(ref interface) = *self;
+        match interface.write_frame(&(*frame).into()) {
+            Ok(()) => Ok(()),
+            Err(_) => Err(TransmitError::BufferFull), // fix this error message
+        }
+    }
+
+    fn receive(&self, identifier: Option<&FullTransferID>) -> Option<Self::Frame> {
+        if identifier.is_some() {
+            unimplemented!("No support for receive by identifier yet");
+        }
+        let CanInterface(ref interface) = *self;
+        match interface.read_frame().ok() {
+            Some(frame) => Some(frame.into()),
+            None => None,
+        }
+    }
+
+    fn received_completely(&self) -> &[FullTransferID] {
+        let CanInterface(ref _interface) = *self;
+        unimplemented!()
+    }
+
+}
+
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CanFrame {
