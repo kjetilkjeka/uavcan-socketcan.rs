@@ -1,6 +1,6 @@
 # uavcan-socketcan.rs
 
-> Port of [uavcan.rs]() to socketcan.
+> Port of [uavcan.rs](https://github.com/UAVCAN/uavcan.rs) to socketcan.
 
 # License
 
