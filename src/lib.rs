@@ -1,7 +1,6 @@
 extern crate socketcan;
 extern crate uavcan;
 
-pub use socketcan::*;
 use uavcan::transfer::TransferFrame;
 use uavcan::transfer::TransferFrameID;
 use uavcan::transfer::TransferInterface;
