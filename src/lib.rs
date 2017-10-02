@@ -12,7 +12,7 @@ use uavcan::transfer::FullTransferID;
 use uavcan::transfer::TransmitError;
 
 pub struct CanInterface {
-    interface: socketcan::CANSocket,
+    interface: Mutex<socketcan::CANSocket>,
     rx_buffer: Mutex<RefCell<ReceiveBuffer>>,
 }
 
@@ -21,11 +21,12 @@ impl CanInterface {
         let interface = socketcan::CANSocket::open(ifname)?;
         interface.set_nonblocking(true).unwrap();
         interface.filter_accept_all().unwrap();
-        Ok(CanInterface{interface: interface, rx_buffer: Mutex::new(RefCell::new(ReceiveBuffer::new())) })
+        Ok(CanInterface{interface: Mutex::new(interface), rx_buffer: Mutex::new(RefCell::new(ReceiveBuffer::new())) })
     }
 
     fn update_receive_buffer(&self) {
-        while let Ok(frame) = self.interface.read_frame() {
+        let interface = self.interface.lock().unwrap();
+        while let Ok(frame) = interface.read_frame() {
             println!("Frame received in driver");
             let data = self.rx_buffer.lock().unwrap();
             let mut buffer = data.borrow_mut();
@@ -39,7 +40,8 @@ impl TransferInterface for CanInterface {
     type IDContainer = Vec<FullTransferID>;
     
     fn transmit(&self, frame: &Self::Frame) -> Result<(), TransmitError> {
-        match self.interface.write_frame(&(*frame).into()) {
+        let interface = self.interface.lock().unwrap();
+        match interface.write_frame(&(*frame).into()) {
             Ok(()) => Ok(()),
             Err(_) => Err(TransmitError::BufferFull), // fix this error message
         }
