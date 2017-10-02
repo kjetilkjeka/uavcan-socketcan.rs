@@ -173,5 +173,13 @@ impl ReceiveBuffer {
         
         Some(can_frame)
     }
+
+    pub fn completed_transfers(&self, identifier: TransferFrameID, mask: TransferFrameID) -> Vec<TransferFrameID> {
+        self.map.iter()
+            .filter(|&(key, _value)| key.mask(mask) == identifier.mask(mask))
+            .filter(|&(_key, value)| value.is_complete())
+            .map(|(key, _value)| key.clone())
+            .collect::<Vec<TransferFrameID>>()            
+    }
 }
 
