@@ -23,6 +23,14 @@ impl CanInterface {
         interface.filter_accept_all().unwrap();
         Ok(CanInterface{interface: interface, rx_buffer: Mutex::new(RefCell::new(ReceiveBuffer::new())) })
     }
+
+    fn update_receive_buffer(&self) {
+        while let Ok(frame) = self.interface.read_frame() {
+            println!("Frame received in driver");
+            let data = self.rx_buffer.lock().unwrap();
+            let mut buffer = data.borrow_mut();
+            buffer.insert(frame.into());
+        }
     }
 }
 
