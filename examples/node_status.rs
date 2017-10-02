@@ -10,18 +10,25 @@ use uavcan::{
     PrimitiveType,
     Frame,
     MessageFrameHeader,
+    Header,
 };
 
 use uavcan::transfer::TransferInterface;
+use uavcan::transfer::FullTransferID;
+use uavcan::transfer::TransferID;
 
 use uavcan::frame_disassembler::FrameDisassembler;
+use uavcan::frame_assembler::{
+    FrameAssembler,
+    AssemblerResult,
+};
 
 use bit_field::BitField;
 
 use uavcan_socketcan::CanFrame;
 use uavcan_socketcan::CanInterface;
 
-#[derive(UavcanStruct, Default)]
+#[derive(Debug, UavcanStruct, Default)]
 struct NodeStatus {
     uptime_sec: Uint32,
     health: Uint2,
@@ -30,13 +37,46 @@ struct NodeStatus {
     vendor_specific_status_code: Uint16,
 }
 message_frame_header!(NodeStatusHeader, 341);
-uavcan_frame!(NodeStatusFrame, NodeStatusHeader, NodeStatus, 0);
+uavcan_frame!(derive(Debug), NodeStatusFrame, NodeStatusHeader, NodeStatus, 0);
 
 fn main() {
 
     let start_time = time::SystemTime::now();
-    let can_interface = CanInterface::open("vcan0").unwrap();
+
+    let can_interface_tx = CanInterface::open("vcan0").unwrap();
+    let can_interface_rx = CanInterface::open("vcan0").unwrap();
     
+    std::thread::spawn(move || {
+
+        let identifier = FullTransferID {
+            frame_id: NodeStatusHeader::new(0, 0).id(),
+            transfer_id: TransferID::from(0),
+        };
+        
+        let mask = identifier.clone();
+        
+        loop {
+            if let Some(id) = can_interface_rx.completed_receives(identifier, mask).first() {
+                let mut assembler = FrameAssembler::new();
+                loop {
+                    match assembler.add_transfer_frame(can_interface_rx.receive(&id).unwrap()) {
+                        Ok(AssemblerResult::Ok) => (),
+                        Ok(AssemblerResult::Finished) => break,
+                        Err(_) => break,
+                    }
+                }
+
+                let node_status_frame: NodeStatusFrame = assembler.build().unwrap();
+                println!("Received node status frame: {:?}",  node_status_frame);
+            }
+                 
+            thread::sleep(time::Duration::from_millis(10));
+            
+        }
+
+    });
+
+   
     loop {
         let now = time::SystemTime::now();
         let uavcan_frame = NodeStatusFrame::from_parts(
@@ -53,10 +93,10 @@ fn main() {
         let mut generator = FrameDisassembler::from_uavcan_frame(uavcan_frame, 0.into());
         let can_frame = generator.next_transfer_frame::<CanFrame>().unwrap();
                 
-        can_interface.transmit(&can_frame).unwrap();
+        can_interface_tx.transmit(&can_frame).unwrap();
 
         thread::sleep(time::Duration::from_millis(1000));
         
     }
-
 }
+
