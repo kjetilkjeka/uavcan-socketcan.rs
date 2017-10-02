@@ -145,7 +145,7 @@ impl TransferBuffer{
 
 
 pub struct ReceiveBuffer {
-    map: HashMap<FullTransferID, TransferBuffer>,
+    map: HashMap<TransferFrameID, TransferBuffer>,
 }
 
 impl ReceiveBuffer {
@@ -153,12 +153,12 @@ impl ReceiveBuffer {
         ReceiveBuffer{map: HashMap::new()}
     }
 
-    pub fn insert(&mut self, key: &FullTransferID, value: CanFrame) {
-        self.map.entry(*key).or_insert(TransferBuffer::new());
-        self.map.get_mut(key).unwrap().push(value);
+    pub fn insert(&mut self, frame: CanFrame) {
+        self.map.entry(frame.id()).or_insert(TransferBuffer::new());
+        self.map.get_mut(&frame.id()).unwrap().push(frame);
     }
 
-    pub fn remove(&mut self, key: &FullTransferID) -> Option<CanFrame> {
+    pub fn remove(&mut self, key: &TransferFrameID) -> Option<CanFrame> {
         let (can_frame, empty) = { 
             let transfer_buffer = match self.map.get_mut(key) {
                 Some(x) => x,
