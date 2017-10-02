@@ -123,6 +123,11 @@ impl TransferBuffer{
         let TransferBuffer(ref vec) = *self;
         vec.is_empty()
     }
+
+    pub fn is_complete(&self) -> bool {
+        let TransferBuffer(ref vec) = *self;
+        vec.iter().any(|&x| x.is_end_frame())
+    }
 }
 
 
