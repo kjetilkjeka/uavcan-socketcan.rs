@@ -4,6 +4,7 @@ extern crate bit_field;
 extern crate uavcan_socketcan;
 
 use std::{thread, time};
+use std::sync::Arc;
 
 use uavcan::types::*;
 use uavcan::{
@@ -43,8 +44,8 @@ fn main() {
 
     let start_time = time::SystemTime::now();
 
-    let can_interface_tx = CanInterface::open("vcan0").unwrap();
-    let can_interface_rx = CanInterface::open("vcan0").unwrap();
+    let can_interface = Arc::new(CanInterface::open("vcan0").unwrap());
+    let can_interface_rx = can_interface.clone();
     
     std::thread::spawn(move || {
 
@@ -93,7 +94,7 @@ fn main() {
         let mut generator = FrameDisassembler::from_uavcan_frame(uavcan_frame, 0.into());
         let can_frame = generator.next_transfer_frame::<CanFrame>().unwrap();
                 
-        can_interface_tx.transmit(&can_frame).unwrap();
+        can_interface.transmit(&can_frame).unwrap();
 
         thread::sleep(time::Duration::from_millis(1000));
         
