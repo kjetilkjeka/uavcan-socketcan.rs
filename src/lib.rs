@@ -2,6 +2,8 @@ extern crate socketcan;
 extern crate uavcan;
 
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::sync::Mutex;
 
 use uavcan::transfer::TransferFrame;
 use uavcan::transfer::TransferFrameID;
@@ -11,13 +13,16 @@ use uavcan::transfer::TransmitError;
 
 pub struct CanInterface {
     interface: socketcan::CANSocket,
+    rx_buffer: Mutex<RefCell<ReceiveBuffer>>,
 }
 
 impl CanInterface {
     pub fn open(ifname: &str) -> Result<Self, socketcan::CANSocketOpenError> {
         let interface = socketcan::CANSocket::open(ifname)?;
         interface.set_nonblocking(true).unwrap();
-        Ok(CanInterface{interface: interface})
+        interface.filter_accept_all().unwrap();
+        Ok(CanInterface{interface: interface, rx_buffer: Mutex::new(RefCell::new(ReceiveBuffer::new())) })
+    }
     }
 }
 
