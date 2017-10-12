@@ -35,9 +35,9 @@ impl CanInterface {
     }
 }
 
-impl TransferInterface for CanInterface {
+impl<'a> TransferInterface<'a> for CanInterface {
     type Frame = CanFrame;
-    type IDContainer = Vec<FullTransferID>;
+    type IDContainer = Box<[FullTransferID]>;
     
     fn transmit(&self, frame: &Self::Frame) -> Result<(), TransmitError> {
         let interface = self.interface.lock().unwrap();
@@ -58,7 +58,7 @@ impl TransferInterface for CanInterface {
         self.update_receive_buffer();
         let data = self.rx_buffer.lock().unwrap();
         let buffer = data.borrow();
-        buffer.completed_transfers(identifier, mask)
+        buffer.completed_transfers(identifier, mask).into_boxed_slice()
     }
 
 }
