@@ -9,7 +9,7 @@ use uavcan::transfer::TransferFrame;
 use uavcan::transfer::TransferFrameID;
 use uavcan::transfer::TransferInterface;
 use uavcan::transfer::FullTransferID;
-use uavcan::transfer::TransmitError;
+use uavcan::transfer::IOError;
 
 pub struct CanInterface {
     interface: Mutex<socketcan::CANSocket>,
@@ -37,13 +37,12 @@ impl CanInterface {
 
 impl<'a> TransferInterface<'a> for CanInterface {
     type Frame = CanFrame;
-    type IDContainer = Box<[FullTransferID]>;
     
-    fn transmit(&self, frame: &Self::Frame) -> Result<(), TransmitError> {
+    fn transmit(&self, frame: &Self::Frame) -> Result<(), IOError> {
         let interface = self.interface.lock().unwrap();
         match interface.write_frame(&(*frame).into()) {
             Ok(()) => Ok(()),
-            Err(_) => Err(TransmitError::BufferFull), // fix this error message
+            Err(_) => Err(IOError::BufferExhausted), // fix this error message
         }
     }
 
@@ -54,11 +53,11 @@ impl<'a> TransferInterface<'a> for CanInterface {
         buffer.remove(identifier)
     }
 
-    fn completed_receives(&self, identifier: FullTransferID, mask: FullTransferID) -> Self::IDContainer {
+    fn completed_receive(&self, identifier: FullTransferID, mask: FullTransferID) -> Option<FullTransferID> {
         self.update_receive_buffer();
         let data = self.rx_buffer.lock().unwrap();
         let buffer = data.borrow();
-        buffer.completed_transfers(identifier, mask).into_boxed_slice()
+        buffer.completed_transfers(identifier, mask).pop()
     }
 
 }
@@ -104,7 +103,7 @@ impl From<socketcan::CANFrame> for CanFrame {
         }
         
         CanFrame{
-            id: TransferFrameID::from(frame.id()),
+            id: TransferFrameID::new(frame.id()),
             dlc: frame.data().len(),
             data: data,
         }

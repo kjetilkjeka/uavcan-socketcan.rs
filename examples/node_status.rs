@@ -51,13 +51,13 @@ fn main() {
 
         let identifier = FullTransferID {
             frame_id: NodeStatusHeader::new(0, 0).id(),
-            transfer_id: TransferID::from(0),
+            transfer_id: TransferID::new(0),
         };
         
         let mask = identifier.clone();
         
         loop {
-            if let Some(id) = can_interface_rx.completed_receives(identifier, mask).first() {
+            if let Some(id) = can_interface_rx.completed_receive(identifier, mask) {
                 let mut assembler = FrameAssembler::new();
                 loop {
                     match assembler.add_transfer_frame(can_interface_rx.receive(&id).unwrap()) {
@@ -91,7 +91,7 @@ fn main() {
             }
         );
 
-        let mut generator = FrameDisassembler::from_uavcan_frame(uavcan_frame, 0.into());
+        let mut generator = FrameDisassembler::from_uavcan_frame(uavcan_frame, TransferID::new(0));
         let can_frame = generator.next_transfer_frame::<CanFrame>().unwrap();
                 
         can_interface.transmit(&can_frame).unwrap();
