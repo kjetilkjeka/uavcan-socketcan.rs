@@ -27,7 +27,6 @@ impl CanInterface {
     fn update_receive_buffer(&self) {
         let interface = self.interface.lock().unwrap();
         while let Ok(frame) = interface.read_frame() {
-            println!("Frame received in driver");
             let data = self.rx_buffer.lock().unwrap();
             let mut buffer = data.borrow_mut();
             buffer.insert(frame.into());
