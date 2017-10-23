@@ -8,10 +8,9 @@ use std::sync::Arc;
 
 use uavcan::types::*;
 use uavcan::{
-    PrimitiveType,
     Frame,
-    MessageFrameHeader,
-    Header,
+    Message,
+    NodeID,
 };
 
 use uavcan::transfer::TransferInterface;
@@ -31,14 +30,18 @@ use uavcan_socketcan::CanInterface;
 
 #[derive(Debug, UavcanStruct, Default)]
 struct NodeStatus {
-    uptime_sec: Uint32,
-    health: Uint2,
-    mode: Uint3,
-    sub_mode: Uint3,
-    vendor_specific_status_code: Uint16,
+    uptime_sec: u32,
+    health: u2,
+    mode: u3,
+    sub_mode: u3,
+    vendor_specific_status_code: u16,
 }
-message_frame_header!(NodeStatusHeader, 341);
-uavcan_frame!(derive(Debug), NodeStatusFrame, NodeStatusHeader, NodeStatus, 0);
+
+impl Message for NodeStatus {
+    const TYPE_ID: u16 = 341;
+}
+
+
 
 fn main() {
 
@@ -50,7 +53,7 @@ fn main() {
     std::thread::spawn(move || {
 
         let identifier = FullTransferID {
-            frame_id: NodeStatusHeader::new(0, 0).id(),
+            frame_id: NodeStatus::id(0, NodeID::new(0)),
             transfer_id: TransferID::new(0),
         };
         
@@ -67,7 +70,7 @@ fn main() {
                     }
                 }
 
-                let node_status_frame: NodeStatusFrame = assembler.build().unwrap();
+                let node_status_frame: Frame<NodeStatus> = assembler.build().unwrap();
                 println!("Received node status frame: {:?}",  node_status_frame);
             }
                  
@@ -80,16 +83,14 @@ fn main() {
    
     loop {
         let now = time::SystemTime::now();
-        let uavcan_frame = NodeStatusFrame::from_parts(
-            NodeStatusHeader::new(0, 32),
+        let uavcan_frame = Frame::from_message(
             NodeStatus{
-                uptime_sec: (now.duration_since(start_time).unwrap().as_secs() as u32).into(),
-                health: 0.into(),
-                mode: 0.into(),
-                sub_mode: 0.into(),
-                vendor_specific_status_code: 0.into(),
-            }
-        );
+                uptime_sec: now.duration_since(start_time).unwrap().as_secs() as u32,
+                health: u2::new(0),
+                mode: u3::new(0),
+                sub_mode: u3::new(0),
+                vendor_specific_status_code: 0,
+            }, 0, NodeID::new(32));
 
         let mut generator = FrameDisassembler::from_uavcan_frame(uavcan_frame, TransferID::new(0));
         let can_frame = generator.next_transfer_frame::<CanFrame>().unwrap();
