@@ -14,6 +14,3 @@ license = "Apache-2.0/MIT"
 [dependencies]
 socketcan = "1.7.0"
 uavcan = {path = "../uavcan/uavcan"}
-
-[dev_dependencies]
-bit_field = "0.8.0"

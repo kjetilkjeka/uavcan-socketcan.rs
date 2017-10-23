@@ -1,6 +1,5 @@
 #[macro_use]
 extern crate uavcan;
-extern crate bit_field;
 extern crate uavcan_socketcan;
 
 use std::{thread, time};
@@ -22,8 +21,6 @@ use uavcan::frame_assembler::{
     FrameAssembler,
     AssemblerResult,
 };
-
-use bit_field::BitField;
 
 use uavcan_socketcan::CanFrame;
 use uavcan_socketcan::CanInterface;
