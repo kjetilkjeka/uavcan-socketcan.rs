@@ -7,22 +7,13 @@ use std::sync::Arc;
 
 use uavcan::types::*;
 use uavcan::{
-    Frame,
     Message,
     NodeID,
+    NodeConfig,
+    Node,
+    SimpleNode,
 };
 
-use uavcan::transfer::TransferInterface;
-use uavcan::transfer::FullTransferID;
-use uavcan::transfer::TransferID;
-
-use uavcan::frame_disassembler::FrameDisassembler;
-use uavcan::frame_assembler::{
-    FrameAssembler,
-    AssemblerResult,
-};
-
-use uavcan_socketcan::CanFrame;
 use uavcan_socketcan::CanInterface;
 
 #[derive(Debug, UavcanStruct, Default)]
@@ -44,56 +35,39 @@ fn main() {
 
     let start_time = time::SystemTime::now();
 
-    let can_interface = Arc::new(CanInterface::open("vcan0").unwrap());
-    let can_interface_rx = can_interface.clone();
+    let can_interface = CanInterface::open("vcan0").unwrap();
+    let node_config = NodeConfig{id: Some(NodeID::new(32))};
+    let node = Arc::new(SimpleNode::new(can_interface, node_config));
+    let node_rx = node.clone();
+
     
     std::thread::spawn(move || {
 
-        let identifier = FullTransferID {
-            frame_id: NodeStatus::id(0, NodeID::new(0)),
-            transfer_id: TransferID::new(0),
-        };
-        
-        let mask = identifier.clone();
-        
         loop {
-            if let Some(id) = can_interface_rx.completed_receive(identifier, mask) {
-                let mut assembler = FrameAssembler::new();
-                loop {
-                    match assembler.add_transfer_frame(can_interface_rx.receive(&id).unwrap()) {
-                        Ok(AssemblerResult::Ok) => (),
-                        Ok(AssemblerResult::Finished) => break,
-                        Err(_) => break,
-                    }
-                }
 
-                let node_status_frame: Frame<NodeStatus> = assembler.build().unwrap();
-                println!("Received node status frame: {:?}",  node_status_frame);
+            if let Ok(message) = node_rx.receive_message::<NodeStatus>() {
+                println!("Received node status frame: {:?}",  message);
             }
-                 
+            
             thread::sleep(time::Duration::from_millis(10));
             
         }
 
     });
-
+    
    
     loop {
         let now = time::SystemTime::now();
-        let uavcan_frame = Frame::from_message(
-            NodeStatus{
-                uptime_sec: now.duration_since(start_time).unwrap().as_secs() as u32,
-                health: u2::new(0),
-                mode: u3::new(0),
-                sub_mode: u3::new(0),
-                vendor_specific_status_code: 0,
-            }, 0, NodeID::new(32));
+        let message = NodeStatus{
+            uptime_sec: now.duration_since(start_time).unwrap().as_secs() as u32,
+            health: u2::new(0),
+            mode: u3::new(0),
+            sub_mode: u3::new(0),
+            vendor_specific_status_code: 0,
+        };
 
-        let mut generator = FrameDisassembler::from_uavcan_frame(uavcan_frame, TransferID::new(0));
-        let can_frame = generator.next_transfer_frame::<CanFrame>().unwrap();
-                
-        can_interface.transmit(&can_frame).unwrap();
-
+        node.transmit_message(message);
+        
         thread::sleep(time::Duration::from_millis(1000));
         
     }
