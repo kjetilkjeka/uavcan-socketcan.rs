@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate uavcan;
 extern crate uavcan_socketcan;
+extern crate dsdl;
+
 
 use std::{thread, time};
 use std::sync::Arc;
@@ -16,21 +18,6 @@ use uavcan::{
 
 use uavcan_socketcan::CanInterface;
 
-#[derive(Debug, UavcanStruct, Default)]
-struct NodeStatus {
-    uptime_sec: u32,
-    health: u2,
-    mode: u3,
-    sub_mode: u3,
-    vendor_specific_status_code: u16,
-}
-
-impl Message for NodeStatus {
-    const TYPE_ID: u16 = 341;
-}
-
-
-
 fn main() {
 
     let start_time = time::SystemTime::now();
@@ -45,7 +32,7 @@ fn main() {
 
         loop {
 
-            if let Ok(message) = node_rx.receive_message::<NodeStatus>() {
+            if let Ok(message) = node_rx.receive_message::<dsdl::uavcan::protocol::NodeStatus>() {
                 println!("Received node status frame: {:?}",  message);
             }
             
@@ -58,7 +45,7 @@ fn main() {
    
     loop {
         let now = time::SystemTime::now();
-        let message = NodeStatus{
+        let message = dsdl::uavcan::protocol::NodeStatus{
             uptime_sec: now.duration_since(start_time).unwrap().as_secs() as u32,
             health: u2::new(0),
             mode: u3::new(0),

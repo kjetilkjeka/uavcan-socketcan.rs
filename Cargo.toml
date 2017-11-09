@@ -14,3 +14,6 @@ license = "Apache-2.0/MIT"
 [dependencies]
 socketcan = "1.7.0"
 uavcan = {path = "../uavcan/uavcan"}
+
+[dev-dependencies]
+dsdl = {path = "../uavcan/dsdl"}
