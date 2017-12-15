@@ -45,14 +45,14 @@ impl<'a> TransferInterface<'a> for CanInterface {
         }
     }
 
-    fn receive(&self, identifier: &FullTransferID) -> Option<Self::Frame> {
+    fn receive(&self, identifier: &TransferFrameID) -> Option<Self::Frame> {
         self.update_receive_buffer();
         let data = self.rx_buffer.lock().unwrap();
         let mut buffer = data.borrow_mut();
         buffer.remove(identifier)
     }
 
-    fn completed_receive(&self, identifier: FullTransferID, mask: FullTransferID) -> Option<FullTransferID> {
+    fn completed_receive(&self, identifier: TransferFrameID, mask: TransferFrameID) -> Option<TransferFrameID> {
         self.update_receive_buffer();
         let data = self.rx_buffer.lock().unwrap();
         let buffer = data.borrow();
@@ -146,7 +146,7 @@ impl TransferBuffer{
 
 
 pub struct ReceiveBuffer {
-    map: HashMap<FullTransferID, TransferBuffer>,
+    map: HashMap<TransferFrameID, TransferBuffer>,
 }
 
 impl ReceiveBuffer {
@@ -155,11 +155,11 @@ impl ReceiveBuffer {
     }
 
     pub fn insert(&mut self, frame: CanFrame) {
-        self.map.entry(frame.full_id()).or_insert(TransferBuffer::new());
-        self.map.get_mut(&frame.full_id()).unwrap().push(frame);
+        self.map.entry(frame.id()).or_insert(TransferBuffer::new());
+        self.map.get_mut(&frame.id()).unwrap().push(frame);
     }
 
-    pub fn remove(&mut self, key: &FullTransferID) -> Option<CanFrame> {
+    pub fn remove(&mut self, key: &TransferFrameID) -> Option<CanFrame> {
         let (can_frame, empty) = { 
             let transfer_buffer = match self.map.get_mut(key) {
                 Some(x) => x,
@@ -175,12 +175,12 @@ impl ReceiveBuffer {
         Some(can_frame)
     }
 
-    pub fn completed_transfers(&self, identifier: FullTransferID, mask: FullTransferID) -> Vec<FullTransferID> {
+    pub fn completed_transfers(&self, identifier: TransferFrameID, mask: TransferFrameID) -> Vec<TransferFrameID> {
         self.map.iter()
             .filter(|&(key, _value)| key.mask(mask) == identifier.mask(mask))
             .filter(|&(_key, value)| value.is_complete())
             .map(|(key, _value)| key.clone())
-            .collect::<Vec<FullTransferID>>()            
+            .collect::<Vec<TransferFrameID>>()            
     }
 }
 
