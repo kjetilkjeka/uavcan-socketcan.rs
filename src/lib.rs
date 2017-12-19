@@ -3,62 +3,80 @@ extern crate uavcan;
 
 use std::collections::HashMap;
 use std::cell::RefCell;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use uavcan::transfer::TransferFrame;
 use uavcan::transfer::TransferFrameID;
+use uavcan::transfer::TransferFrameIDFilter;
 use uavcan::transfer::TransferInterface;
+use uavcan::transfer::TransferSubscriber;
 use uavcan::transfer::FullTransferID;
 use uavcan::transfer::IOError;
 
 pub struct CanInterface {
-    interface: Mutex<socketcan::CANSocket>,
-    rx_buffer: Mutex<RefCell<ReceiveBuffer>>,
+    interface: Arc<socketcan::CANSocket>,
+    subscribers: Arc<Mutex<Vec<SubscriberHandle>>>,
+    receiver_handle: std::thread::JoinHandle<()>,
 }
 
 impl CanInterface {
     pub fn open(ifname: &str) -> Result<Self, socketcan::CANSocketOpenError> {
-        let interface = socketcan::CANSocket::open(ifname)?;
-        interface.set_nonblocking(true).unwrap();
+        let interface = Arc::new(socketcan::CANSocket::open(ifname)?);
         interface.filter_accept_all().unwrap();
-        Ok(CanInterface{interface: Mutex::new(interface), rx_buffer: Mutex::new(RefCell::new(ReceiveBuffer::new())) })
-    }
+        
+        let subscribers: Arc<Mutex<Vec<SubscriberHandle>>> = Arc::new(Mutex::new(Vec::new()));
 
-    fn update_receive_buffer(&self) {
-        let interface = self.interface.lock().unwrap();
-        while let Ok(frame) = interface.read_frame() {
-            let data = self.rx_buffer.lock().unwrap();
-            let mut buffer = data.borrow_mut();
-            buffer.insert(frame.into());
-        }
+        let interface_thread = interface.clone();
+        let subscribers_thread = subscribers.clone();
+        
+        let receiver_handle = std::thread::spawn(move || {
+            loop {
+                if let Ok(can_frame) = interface_thread.read_frame() {
+                    let can_frame = CanFrame::from(can_frame);
+                    for sub in subscribers_thread.lock().unwrap().iter() {
+                        if sub.filter.is_match(can_frame.id()) {
+                            let mut buffer = sub.buffer.lock().unwrap();
+                            buffer.push(can_frame);
+                        }
+                    }
+                }
+            }
+        });
+        
+        Ok(CanInterface{
+            interface: interface,
+            subscribers: subscribers,
+            receiver_handle: receiver_handle,
+        })
     }
 }
 
-impl<'a> TransferInterface<'a> for CanInterface {
+impl TransferInterface for CanInterface {
     type Frame = CanFrame;
+    type Subscriber = Subscriber;
     
     fn transmit(&self, frame: &Self::Frame) -> Result<(), IOError> {
-        let interface = self.interface.lock().unwrap();
-        match interface.write_frame(&(*frame).into()) {
+        match self.interface.write_frame(&(*frame).into()) {
             Ok(()) => Ok(()),
             Err(_) => Err(IOError::BufferExhausted), // fix this error message
         }
     }
 
-    fn receive(&self, identifier: &TransferFrameID) -> Option<Self::Frame> {
-        self.update_receive_buffer();
-        let data = self.rx_buffer.lock().unwrap();
-        let mut buffer = data.borrow_mut();
-        buffer.remove(identifier)
-    }
+    fn subscribe(&self, filter: TransferFrameIDFilter) -> Result<Self::Subscriber, ()> {
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let mut subscribers = self.subscribers.lock().unwrap();
 
-    fn completed_receive(&self, identifier: TransferFrameID, mask: TransferFrameID) -> Option<TransferFrameID> {
-        self.update_receive_buffer();
-        let data = self.rx_buffer.lock().unwrap();
-        let buffer = data.borrow();
-        buffer.completed_transfers(identifier, mask).pop()
-    }
+        let subscriber_handle = SubscriberHandle {
+            filter: filter,
+            buffer: buffer.clone(),
+        };
 
+        subscribers.push(subscriber_handle);
+
+        Ok(Subscriber{
+            buffer: buffer,
+        })
+    }
 }
 
 
@@ -115,72 +133,32 @@ impl From<CanFrame> for socketcan::CANFrame {
     }
 }
 
-
-pub struct TransferBuffer(Vec<CanFrame>);
-
-impl TransferBuffer{
-    pub fn new() -> Self {
-        TransferBuffer(Vec::new())
-    }
-
-    pub fn push(&mut self, frame: CanFrame) {
-        let TransferBuffer(ref mut vec) = *self;
-        vec.push(frame);
-    }
-
-    pub fn remove(&mut self) -> CanFrame {
-        let TransferBuffer(ref mut vec) = *self;
-        vec.remove(0)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        let TransferBuffer(ref vec) = *self;
-        vec.is_empty()
-    }
-
-    pub fn is_complete(&self) -> bool {
-        let TransferBuffer(ref vec) = *self;
-        vec.iter().any(|&x| x.is_end_frame())
-    }
+pub struct SubscriberHandle {
+    buffer: Arc<Mutex<Vec<CanFrame>>>,
+    filter: TransferFrameIDFilter,
 }
 
-
-pub struct ReceiveBuffer {
-    map: HashMap<TransferFrameID, TransferBuffer>,
+pub struct Subscriber {
+    buffer: Arc<Mutex<Vec<CanFrame>>>,
 }
 
-impl ReceiveBuffer {
-    pub fn new() -> Self {
-        ReceiveBuffer{map: HashMap::new()}
+impl TransferSubscriber for Subscriber {
+    type Frame = CanFrame;
+
+    fn receive(&self, identifier: &TransferFrameID) -> Option<Self::Frame> {
+        let mut buffer = self.buffer.lock().unwrap();
+        let pos = buffer.iter().position(|x| x.id() == *identifier)?;
+        Some(buffer.remove(pos))
     }
 
-    pub fn insert(&mut self, frame: CanFrame) {
-        self.map.entry(frame.id()).or_insert(TransferBuffer::new());
-        self.map.get_mut(&frame.id()).unwrap().push(frame);
+    fn retain<F>(&self, f: F) where F: FnMut(&Self::Frame) -> bool {
+        let mut buffer = self.buffer.lock().unwrap();
+        buffer.retain(f);
     }
-
-    pub fn remove(&mut self, key: &TransferFrameID) -> Option<CanFrame> {
-        let (can_frame, empty) = { 
-            let transfer_buffer = match self.map.get_mut(key) {
-                Some(x) => x,
-                None => return None,
-            };
-            (transfer_buffer.remove(), transfer_buffer.is_empty())
-        };
-
-        if empty {
-            self.map.remove(key);
-        }
-        
-        Some(can_frame)
+    
+    fn find<F>(&self, mut predicate: F) -> Option<Self::Frame> where F: FnMut(&Self::Frame) -> bool {
+        let buffer = self.buffer.lock().unwrap();
+        Some(*buffer.iter().find(|x| predicate(&x))?)
     }
-
-    pub fn completed_transfers(&self, identifier: TransferFrameID, mask: TransferFrameID) -> Vec<TransferFrameID> {
-        self.map.iter()
-            .filter(|&(key, _value)| key.mask(mask) == identifier.mask(mask))
-            .filter(|&(_key, value)| value.is_complete())
-            .map(|(key, _value)| key.clone())
-            .collect::<Vec<TransferFrameID>>()            
-    }
+    
 }
-
