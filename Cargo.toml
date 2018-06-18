@@ -13,7 +13,7 @@ license = "Apache-2.0/MIT"
 
 [dependencies]
 socketcan = "1.7.0"
-uavcan = {path = "../uavcan/uavcan"}
+uavcan = {git = "https://github.com/UAVCAN/uavcan.rs.git", rev = "ce2c1f65a4f8f2ac15677b73af22f38c4d7c1481"}
 
 [dev-dependencies]
-dsdl = {path = "../uavcan/dsdl"}
+dsdl = {git = "https://github.com/UAVCAN/uavcan.rs.git", rev = "ce2c1f65a4f8f2ac15677b73af22f38c4d7c1481"}

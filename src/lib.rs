@@ -1,6 +1,8 @@
 extern crate socketcan;
 extern crate uavcan;
 
+pub use uavcan::*;
+
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
